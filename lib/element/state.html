@@ -1,0 +1,115 @@
+<template id="__redux_initial_state__"></template>
+<script>
+(function(global, document) {
+  var TAG_NAME = 'redux-state';
+  var TYPE_JSON = 'json';
+  var TYPE_JSONP = 'jsonp';
+  var CALLBACK_PARAM = 'jsonp';
+  var ACTION_INIT = '@@redux-store/INIT';
+  var ownerDocument = document.currentScript.ownerDocument;
+  var template = ownerDocument.getElementById('__redux_initial_state__');
+
+  var prototype = Object.create(ReduxReducerElement.prototype);
+
+  prototype.createdCallback = function createdCallback() {
+    // hide anthing in textContent
+    var shadow = this.createShadowRoot();
+    var clone = document.importNode(template.content, true);
+    shadow.appendChild(clone);
+
+    document.addEventListener('DOMContentLoaded', (function(reduxState) {
+      return function() {
+        // fetch/read the initial state
+        readState(reduxState, function(err, data) {
+          if (err) {
+            throw err;
+          }
+          reduxState._state = data;
+          reduxState.parentNode.dispatch({ type: ACTION_INIT });
+        });
+      };
+    })(this));
+  };
+
+  prototype.reduce = function initialStateReduce(state, action) {
+    if (action.type === ACTION_INIT) {
+      state = this._state;
+    }
+    return state;
+  };
+
+  var options = {
+    prototype: prototype
+  };
+
+  function readState(element, cb) {
+    var type = element.getAttribute('type');
+    var src = element.getAttribute('src');
+    var callback = element.getAttribute('callback');
+    var anchor;
+
+    // default to json if not set or invalid
+    if (!type || (type !== TYPE_JSON && type !== TYPE_JSONP)) {
+      type = TYPE_JSON;
+    }
+
+    // default jsonp callback
+    if (type === TYPE_JSONP && (!callback || typeof callback !== 'string')) {
+      callback = CALLBACK_PARAM;
+    }
+
+    if (!src) {
+      try {
+        var state = JSON.parse(element.textContent);
+        cb(null, state);
+      } catch (e) {
+        cb(e);
+      }
+    } else {
+      // make a fetch request to the json
+      if (type === TYPE_JSON) {
+        fetch(src).then(function(res) {
+          return res.json();
+        }).then(function(json) {
+          cb(null, json);
+        }).catch(cb);
+      } else if (type === TYPE_JSONP) {
+        // parse src url
+        anchor = document.createElement('a');
+        anchor.href = src;
+
+        // does it have a query string
+        if (anchor.search) {
+          anchor.search = anchor.search + '&';
+        } else {
+          anchor.search = '?';
+        }
+
+        // add jsonp callback to src
+        anchor.search = anchor.search + callback + '=__redux_jsonp__';
+        src = anchor.href;
+
+        // jsonp callback
+        global['__redux_jsonp__'] = function reduxJSONP(json) {
+          cb(null, json);
+          // clean up
+          delete global['__redux_jsonp__'];
+          document.head.removeChild(script);
+        };
+
+        // jsonp request
+        script = document.createElement('script');
+        script.src = src;
+        script.onerror = function() {
+          cb(new Error('could not load jsonp'));
+        };
+
+        document.head.appendChild(script);
+      }
+    }
+  }
+
+  var ReduxStateElement = document.registerElement(TAG_NAME, options);
+  window.ReduxStateElement = ReduxStateElement;
+})(this, this.document);
+</script>
